@@ -121,7 +121,7 @@ if __name__ == '__main__':
     unk = eval(sys.argv[2]) if len(sys.argv) > 2 else {}
     data = Path(fname).read_bytes()
     hdr = read_header(data)
-    idx = PackageIndex('UT2004')
+    idx = PackageIndex({Path('UT2004')})
     model = Model(idx)
     pmap = PackageMap(hdr, idx, unk)
     infer(data, hdr, pmap, model)

@@ -18,6 +18,7 @@ from infer_virtual import find_class
 from netmodel import Model, ObjRef, UnknownObject, VirtualNetClass
 from pkgdb import DEFAULT_DB, PackageDB
 from upkg import PackageIndex
+from utpath import find_ut2004, find_ut2004_userdir
 
 # ---------------------------------------------------------------------------
 # Packages that are referenced by demos but missing from the installation.
@@ -852,14 +853,19 @@ def main(argv=None):
     ap.add_argument('--db', default=DEFAULT_DB, type=Path,
                     help='package database (default: %(default)s)')
     ap.add_argument('--ut', type=Path,
-                    help='read packages from this UT2004 installation '
-                    'instead of the package database')
+                    help='use this UT2004 installation instead of the detected one')
     ap.add_argument('--out', type=Path, default=Path('output'))
     args = ap.parse_args(argv)
+    if args.ut and not args.ut.is_dir():
+        ap.error('--ut must point to an existing directory: %s' % args.ut)
     if args.ut:
-        if not args.ut.is_dir():
-            ap.error('--ut must point to an existing directory: %s' % args.ut)
-        idx = PackageIndex(args.ut)
+        ut_paths = {args.ut}
+    else:
+        ut_paths = {path for path in
+                    (find_ut2004(), find_ut2004_userdir())
+                    if path is not None and path.is_dir()}
+    if ut_paths:
+        idx = PackageIndex(ut_paths)
     else:
         if not args.db.exists():
             ap.error('package database %s not found; create it with '

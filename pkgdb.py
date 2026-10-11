@@ -124,7 +124,7 @@ def build_db(ut_dir, demo_paths=(), all_packages=False, db_path=DEFAULT_DB):
     with `all_packages`, every package of the installation.
     """
     from demo import read_header
-    idx = PackageIndex(ut_dir)
+    idx = PackageIndex({Path(ut_dir)})
     db = PackageDB(db_path)
     if all_packages:
         todo = list(idx.files)

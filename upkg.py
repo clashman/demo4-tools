@@ -287,19 +287,21 @@ class Package:
 
 
 class PackageIndex:
-    """Locate packages in a UT2004 installation."""
+    """Locate packages in one or more UT2004 directories."""
 
-    def __init__(self, root):
+    def __init__(self, paths):
         self.files = {}
-        for sub in ('System', 'Maps', 'Textures', 'Sounds', 'StaticMeshes',
-                    'Animations', 'Music', 'Prefabs', 'KarmaData'):
-            d = root / sub
-            if not d.is_dir():
-                continue
-            for path in d.iterdir():
-                if path.suffix.lower() in ('.u', '.ut2', '.utx', '.uax',
-                                            '.usx', '.ukx', '.umx', '.uvx'):
-                    self.files.setdefault(path.stem.lower(), path)
+        for path in paths:
+            root = Path(path)
+            for sub in ('System', 'Maps', 'Textures', 'Sounds', 'StaticMeshes',
+                        'Animations', 'Music', 'Prefabs', 'KarmaData'):
+                d = root / sub
+                if not d.is_dir():
+                    continue
+                for path in d.iterdir():
+                    if path.suffix.lower() in ('.u', '.ut2', '.utx', '.uax',
+                                                '.usx', '.ukx', '.umx', '.uvx'):
+                        self.files.setdefault(path.stem.lower(), path)
         self.cache = {}
 
     def get(self, name, guid=None):

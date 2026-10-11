@@ -11,7 +11,9 @@ python ut2k4demo.py *.demo4 [--db ut2004_packages.json.gz] [--out output]
 No UT2004 installation is needed. The layouts of classes and properties come
 from the package database `ut2004_packages.json.gz` (about 8 MB). It contains
 the metadata of all 871 packages of the UT2004 installation that this tool was
-built with. To read directly from an installation instead, pass `--ut <dir>`.
+built with. A detected default installation is used automatically; pass
+`--ut <dir>` to override it. If no installation is detected, the package
+database is used.
 
 To build or extend the database (an installation is only needed for this step):
 
