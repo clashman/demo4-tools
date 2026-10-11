@@ -12,12 +12,11 @@ Build or extend the database with a UT2004 installation:
 import argparse
 import gzip
 import json
-import os
+from pathlib import Path
 
 from upkg import Export, Package, PackageIndex, PROPERTY_CLASSES
 
-DEFAULT_DB = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          'ut2004_packages.json.gz')
+DEFAULT_DB = Path(__file__).resolve().with_name('ut2004_packages.json.gz')
 
 # export classes whose field metadata is needed for replication
 # (all UField subclasses: constants are part of the field chains, too)
@@ -86,7 +85,7 @@ class PackageDB:
     def __init__(self, path=DEFAULT_DB):
         self.path = path
         self.records = {}  # name lower -> {guid hex: record}
-        if os.path.exists(path):
+        if Path(path).exists():
             with gzip.open(path, 'rt', encoding='utf-8') as f:
                 for rec in json.load(f)['packages']:
                     self.add_record(rec)
@@ -132,7 +131,7 @@ def build_db(ut_dir, demo_paths=(), all_packages=False, db_path=DEFAULT_DB):
     else:
         todo = []
         for path in demo_paths:
-            with open(path, 'rb') as f:
+            with Path(path).open('rb') as f:
                 hdr = read_header(f.read())
             todo += [name for name, _, _ in hdr['packages']]
     added = []
@@ -167,17 +166,18 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('demos', nargs='*', help='demos whose packages are added')
-    ap.add_argument('--ut', required=True, help='UT2004 installation directory')
-    ap.add_argument('--db', default=DEFAULT_DB, help='database file')
+    ap.add_argument('--ut', required=True, type=Path,
+                    help='UT2004 installation directory')
+    ap.add_argument('--db', default=DEFAULT_DB, type=Path, help='database file')
     ap.add_argument('--all', action='store_true', help='add every package')
     args = ap.parse_args(argv)
-    if not os.path.isdir(args.ut):
+    if not args.ut.is_dir():
         ap.error('--ut must point to an existing directory: %s' % args.ut)
     if not args.demos and not args.all:
         ap.error('give demo files or --all')
     added, missing = build_db(args.ut, args.demos, args.all, args.db)
     print('added %d packages to %s (%.1f MB)' % (
-        len(added), args.db, os.path.getsize(args.db) / 1e6))
+        len(added), args.db, args.db.stat().st_size / 1e6))
     if missing:
         print('not in the installation: %s' % ', '.join(missing))
 

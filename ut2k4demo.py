@@ -10,8 +10,8 @@ installation.
 import argparse
 import bisect
 import json
-import os
 import sys
+from pathlib import Path
 
 from demo import Actor, DemoParser, PackageMap, read_header
 from infer_virtual import find_class
@@ -722,14 +722,14 @@ def build_parser(data, hdr, pkgindex, model):
 
 
 def analyze(path, pkgindex, model):
-    data = open(path, 'rb').read()
+    data = Path(path).read_bytes()
     hdr = read_header(data)
     parser, an, pmap = build_parser(data, hdr, pkgindex, model)
     parser.run()
     t0 = 0.0
     kills = an.kills
     result = {
-        'file': os.path.basename(path),
+        'file': Path(path).name,
         'map': hdr['map'],
         'gametype': hdr['gametype'],
         'recorder': hdr['recorder'],
@@ -848,25 +848,26 @@ def to_markdown(r):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('demos', nargs='+')
-    ap.add_argument('--db', default=DEFAULT_DB,
+    ap.add_argument('demos', nargs='+', type=Path)
+    ap.add_argument('--db', default=DEFAULT_DB, type=Path,
                     help='package database (default: %(default)s)')
-    ap.add_argument('--ut', help='read packages from this UT2004 installation '
+    ap.add_argument('--ut', type=Path,
+                    help='read packages from this UT2004 installation '
                     'instead of the package database')
-    ap.add_argument('--out', default='output')
+    ap.add_argument('--out', type=Path, default=Path('output'))
     args = ap.parse_args(argv)
     if args.ut:
-        if not os.path.isdir(args.ut):
+        if not args.ut.is_dir():
             ap.error('--ut must point to an existing directory: %s' % args.ut)
         idx = PackageIndex(args.ut)
     else:
-        if not os.path.exists(args.db):
+        if not args.db.exists():
             ap.error('package database %s not found; create it with '
                      '"python pkgdb.py --ut <UT2004 dir> <demos>" or pass --ut'
                      % args.db)
         idx = PackageDB(args.db)
     model = Model(idx)
-    os.makedirs(args.out, exist_ok=True)
+    args.out.mkdir(parents=True, exist_ok=True)
     for path in args.demos:
         r = analyze(path, idx, model)
         unknown = [p for p in r['missing_packages']
@@ -879,10 +880,10 @@ def main(argv=None):
             print('WARNING: %s: server used newer package generations not '
                   'described in NEWER_GENERATIONS, results may be wrong: %s'
                   % (path, ', '.join(r['newer_generations'])))
-        base = os.path.splitext(os.path.basename(path))[0]
-        with open(os.path.join(args.out, base + '.json'), 'w', encoding='utf-8') as f:
+        base = path.stem
+        with (args.out / (base + '.json')).open('w', encoding='utf-8') as f:
             json.dump(r, f, indent=1, ensure_ascii=False)
-        with open(os.path.join(args.out, base + '.md'), 'w', encoding='utf-8') as f:
+        with (args.out / (base + '.md')).open('w', encoding='utf-8') as f:
             f.write(to_markdown(r))
         print('%s: %d kills, %d pickups, stats %s' % (
             base, len(r['kills']), len(r['pickups']), r['decode_stats']))

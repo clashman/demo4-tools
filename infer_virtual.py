@@ -6,6 +6,7 @@ replicated fields + whether an initial rotation is sent). The hypothesis that
 decodes the most bunches cleanly wins.
 """
 import sys
+from pathlib import Path
 
 from bits import BitReader, BitError
 from demo import (DemoParser, DecodeError, UnknownFieldError, PackageMap,
@@ -118,7 +119,7 @@ if __name__ == '__main__':
     from upkg import PackageIndex
     fname = sys.argv[1]
     unk = eval(sys.argv[2]) if len(sys.argv) > 2 else {}
-    data = open(fname, 'rb').read()
+    data = Path(fname).read_bytes()
     hdr = read_header(data)
     idx = PackageIndex('UT2004')
     model = Model(idx)

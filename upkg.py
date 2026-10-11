@@ -3,8 +3,8 @@
 Reads name/import/export tables and generation info, and extracts the bits of
 class/property/function metadata needed to decode replicated network data.
 """
-import os
 import struct
+from pathlib import Path
 
 
 class Reader:
@@ -88,9 +88,10 @@ class Export:
 
 class Package:
     def __init__(self, path):
+        path = Path(path)
         self.path = path
-        self.name = os.path.splitext(os.path.basename(path))[0]
-        with open(path, 'rb') as f:
+        self.name = path.stem
+        with path.open('rb') as f:
             self.data = f.read()
         r = Reader(self.data)
         tag = r.u32()
@@ -292,14 +293,13 @@ class PackageIndex:
         self.files = {}
         for sub in ('System', 'Maps', 'Textures', 'Sounds', 'StaticMeshes',
                     'Animations', 'Music', 'Prefabs', 'KarmaData'):
-            d = os.path.join(root, sub)
-            if not os.path.isdir(d):
+            d = root / sub
+            if not d.is_dir():
                 continue
-            for fn in os.listdir(d):
-                base, ext = os.path.splitext(fn)
-                if ext.lower() in ('.u', '.ut2', '.utx', '.uax', '.usx',
-                                   '.ukx', '.umx', '.uvx'):
-                    self.files.setdefault(base.lower(), os.path.join(d, fn))
+            for path in d.iterdir():
+                if path.suffix.lower() in ('.u', '.ut2', '.utx', '.uax',
+                                            '.usx', '.ukx', '.umx', '.uvx'):
+                    self.files.setdefault(path.stem.lower(), path)
         self.cache = {}
 
     def get(self, name, guid=None):
