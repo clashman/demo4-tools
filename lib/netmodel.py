@@ -1,5 +1,5 @@
 """Class / property network layout for UE2 (UT2004) replication."""
-from upkg import CPF_Net, CPF_Parm, CPF_ReturnParm, FUNC_Net, PROPERTY_CLASSES
+from .upkg import CPF_Net, CPF_Parm, CPF_ReturnParm, FUNC_Net, PROPERTY_CLASSES
 
 
 def ceil_log2(n):

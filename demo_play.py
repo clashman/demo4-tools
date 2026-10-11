@@ -4,7 +4,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from utpath import find_ut2004, find_ut2004_userdir
+from lib.utpath import find_ut2004, find_ut2004_userdir
 
 
 def main(argv=None):

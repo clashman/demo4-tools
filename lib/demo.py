@@ -1,9 +1,9 @@
 """UT2004 .demo4 parser (UE2 network demo format)."""
 import struct
 
-from bits import BitReader, BitError, packet_bits
-from upkg import Reader
-from netmodel import ObjRef, UnknownObject
+from .bits import BitReader, BitError, packet_bits
+from .upkg import Reader
+from .netmodel import ObjRef, UnknownObject
 
 MAX_PACKETID = 16384
 MAX_CHANNELS = 1023

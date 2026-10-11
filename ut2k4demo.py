@@ -13,12 +13,12 @@ import json
 import sys
 from pathlib import Path
 
-from demo import Actor, DemoParser, PackageMap, read_header
+from lib.demo import Actor, DemoParser, PackageMap, read_header
 from infer_virtual import find_class
-from netmodel import Model, ObjRef, UnknownObject, VirtualNetClass
+from lib.netmodel import Model, ObjRef, UnknownObject, VirtualNetClass
 from pkgdb import DEFAULT_DB, PackageDB
-from upkg import PackageIndex
-from utpath import find_ut2004, find_ut2004_userdir
+from lib.upkg import PackageIndex
+from lib.utpath import find_ut2004, find_ut2004_userdir
 
 # ---------------------------------------------------------------------------
 # Packages that are referenced by demos but missing from the installation.

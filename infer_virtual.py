@@ -8,10 +8,10 @@ decodes the most bunches cleanly wins.
 import sys
 from pathlib import Path
 
-from bits import BitReader, BitError
-from demo import (DemoParser, DecodeError, UnknownFieldError, PackageMap,
-                  read_header)
-from netmodel import Model, VirtualNetClass
+from lib.bits import BitReader, BitError
+from lib.demo import (DemoParser, DecodeError, UnknownFieldError, PackageMap,
+                      read_header)
+from lib.netmodel import Model, VirtualNetClass
 
 CANDIDATE_SUPERS = [
     'XGame.xPawn', 'XGame.xPlayer', 'Engine.PlayerController',
@@ -116,7 +116,7 @@ def infer(data, hdr, pmap, model, max_extra=48, verbose=True):
 
 
 if __name__ == '__main__':
-    from upkg import PackageIndex
+    from lib.upkg import PackageIndex
     fname = sys.argv[1]
     unk = eval(sys.argv[2]) if len(sys.argv) > 2 else {}
     data = Path(fname).read_bytes()

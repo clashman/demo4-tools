@@ -14,7 +14,7 @@ import gzip
 import json
 from pathlib import Path
 
-from upkg import Export, Package, PackageIndex, PROPERTY_CLASSES
+from lib.upkg import Export, Package, PackageIndex, PROPERTY_CLASSES
 
 DEFAULT_DB = Path(__file__).resolve().with_name('ut2004_packages.json.gz')
 
