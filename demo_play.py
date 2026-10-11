@@ -2,7 +2,6 @@
 import argparse
 import os
 import subprocess
-import sys
 from pathlib import Path
 
 from utpath import find_ut2004, find_ut2004_userdir
@@ -28,9 +27,10 @@ def main(argv=None):
 
     demo_path = Path(os.path.relpath(args.demo.resolve(), user_dir / 'Demos'))
     demo_path = demo_path.with_suffix('').as_posix()
-    (user_dir / 'System' / 'mwatch.txt').write_text('demoplay "%s"' % demo_path, encoding='utf-8')
-    subprocess.run([executable, 'EXEC=mwatch.txt', ], check=False)
-
+    script = user_dir / 'System' / 'mwatch.txt'
+    script.write_text('demoplay "%s"' % demo_path, encoding='utf-8')
+    subprocess.run([executable, f'EXEC={script.name}', ], check=False)
+    script.unlink()
 
 if __name__ == '__main__':
     main()
