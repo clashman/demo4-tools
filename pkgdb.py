@@ -171,6 +171,8 @@ def main(argv=None):
     ap.add_argument('--db', default=DEFAULT_DB, help='database file')
     ap.add_argument('--all', action='store_true', help='add every package')
     args = ap.parse_args(argv)
+    if not os.path.isdir(args.ut):
+        ap.error('--ut must point to an existing directory: %s' % args.ut)
     if not args.demos and not args.all:
         ap.error('give demo files or --all')
     added, missing = build_db(args.ut, args.demos, args.all, args.db)

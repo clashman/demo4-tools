@@ -856,6 +856,8 @@ def main(argv=None):
     ap.add_argument('--out', default='output')
     args = ap.parse_args(argv)
     if args.ut:
+        if not os.path.isdir(args.ut):
+            ap.error('--ut must point to an existing directory: %s' % args.ut)
         idx = PackageIndex(args.ut)
     else:
         if not os.path.exists(args.db):
