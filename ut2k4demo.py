@@ -175,6 +175,7 @@ class Analyzer:
         self.hdr = hdr
         self.pris = {}            # actor id -> PRI actor
         self.kills = []
+        self.chat = []
         self.pickup_events = []   # from pickup actors
         self.pickup_msgs = []     # recorder pickup messages
         self.pickups = {}         # actor id -> PickupState
@@ -301,6 +302,39 @@ class Analyzer:
                                            args.get('SoundLocation'),
                                            'sound:' + snd.name))
             return
+        if a.netclass.is_a('PlayerController'):
+            msg_type = args.get('Type')
+            msg_type = msg_type if isinstance(msg_type, str) else ''
+            msg_type_key = msg_type.lower()
+            text = args.get('S')
+            sender = args.get('PRI')
+            is_chat = (name in ('TeamMessage', 'ClientMessage')
+                       and msg_type_key in ('say', 'teamsay'))
+            if is_chat and isinstance(text, str):
+                channel = ('team' if 'team' in msg_type_key else
+                           'public' if msg_type_key == 'say' else 'unknown')
+                self.chat.append({
+                    'time': p.time,
+                    'player': self.pri_name(sender),
+                    'channel': channel,
+                    'type': msg_type or name,
+                    'text': text,
+                    'rpc': name,
+                })
+                return
+            if name in ('ServerSay', 'ServerTeamSay'):
+                text = args.get('Msg')
+                if isinstance(text, str):
+                    self.chat.append({
+                        'time': p.time,
+                        'player': self.pri_name(
+                            a.props.get('PlayerReplicationInfo')),
+                        'channel': 'team' if name == 'ServerTeamSay' else 'public',
+                        'type': name,
+                        'text': text,
+                        'rpc': name,
+                    })
+                return
         if name != 'ReceiveLocalizedMessage':
             return
         if not a.netclass.is_a('PlayerController'):
@@ -741,6 +775,7 @@ def analyze(path, pkgindex, model):
         'newer_generations': pmap.newer,
         'decode_stats': dict(parser.stats),
         'kills': kills,
+        'chat': an.chat,
         'pickups': an.resolve_pickups(),
         'scoreboard': an.scoreboard(),
         'teams': an.team_scores(),
@@ -764,6 +799,15 @@ def to_markdown(r):
     L.append('- Demo-Länge: %s' % fmt_time(r['duration']))
     if r.get('winner'):
         L.append('- Gewinner: **%s**' % r['winner'])
+    L.append('')
+    L.append('## Chat (%d)' % len(r.get('chat', ())))
+    L.append('')
+    L.append('| Zeit | Spieler | Kanal | Nachricht |')
+    L.append('|---|---|---|---|')
+    for msg in r.get('chat', ()):
+        text = str(msg['text']).replace('|', r'\|').replace('\n', ' ')
+        L.append('| %s | %s | %s | %s |' % (
+            fmt_time(msg['time']), msg['player'] or '', msg['channel'], text))
     L.append('')
     L.append('## Score')
     L.append('')
