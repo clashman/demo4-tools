@@ -180,7 +180,10 @@ class Analyzer:
         self.pickup_msgs = []     # recorder pickup messages
         self.pickups = {}         # actor id -> PickupState
         self.pawns = {}           # actor id -> pawn actor
+        self.pawn_pris = {}       # pawn id -> last assigned player PRI
         self.pawn_track = {}      # pawn id -> [(time, loc), ...]
+        self.pawn_samples = {}    # pawn id -> decoded movement state samples
+        self.pawn_state = {}      # pawn id -> latest location/rotation/velocity
         self.recorder_ctrl = None
         self.rec_track = []       # recorder positions from ClientAdjustPosition
         self.first_open_time = None
@@ -236,8 +239,14 @@ class Analyzer:
         elif nc.is_a('Pawn'):
             self.pawns[a.id] = a
             self.pawn_track[a.id] = []
+            state = {'location': a.spawn_loc,
+                     'rotation': a.props.get('Rotation'),
+                     'velocity': a.props.get('Velocity')}
+            self.pawn_state[a.id] = state
+            self.pawn_samples[a.id] = []
             if a.spawn_loc:
                 self.pawn_track[a.id].append((p.time, a.spawn_loc))
+                self.pawn_samples[a.id].append(dict(state, time=p.time))
         elif nc.is_a('GameReplicationInfo'):
             self.gri = a
         elif nc.is_a('TeamInfo'):
@@ -268,10 +277,31 @@ class Analyzer:
                 st.hidden = value
             return
         if a.id in self.pawns:
+            state = self.pawn_state[a.id]
+            if key == 'PlayerReplicationInfo':
+                # Pawn channels clear this property when they are torn down.
+                # Keep the last real owner so closed pawn lifetimes can still
+                # be attributed to their player after parsing finishes.
+                if isinstance(value, Actor):
+                    self.pawn_pris[a.id] = value
+                return
             if key == 'Location':
                 self.pawn_track[a.id].append((p.time, value))
+                state['location'] = value
             elif key == 'PawnPosition' and isinstance(value, dict):
-                self.pawn_track[a.id].append((p.time, value.get('Location')))
+                location = value.get('Location')
+                self.pawn_track[a.id].append((p.time, location))
+                state['location'] = location
+                state['rotation'] = value.get('Rotation', state['rotation'])
+                state['velocity'] = value.get('Velocity', state['velocity'])
+            elif key == 'Rotation':
+                state['rotation'] = value
+            elif key == 'Velocity':
+                state['velocity'] = value
+            else:
+                return
+            if state['location'] is not None:
+                self.pawn_samples[a.id].append(dict(state, time=p.time))
             return
         if a.id in self.pris and key == 'PlayerVolume':
             # the area a player is in; replicated for every player
