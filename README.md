@@ -26,6 +26,17 @@ For every demo, a Markdown report (`<demo>.md`) and the raw data (`<demo>.json`)
 are written to the output directory. Team games (e.g. `xTeamGame`) are
 supported: the report then also contains team scores and team kills.
 
+## 3D demo viewer
+
+The viewer displays inferred player movement trails, facing direction and
+movement direction for a demo:
+
+```bash
+python demo4_viewer.py path/to/demo.demo4
+```
+
+![UT2004 Demo Viewer showing two players' movement trails](demo4_viewer.png)
+
 ## Architecture
 
 ```
