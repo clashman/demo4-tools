@@ -42,6 +42,11 @@ inset. Player checkboxes and the trail/direction toggles control visibility;
 the timeline supports scrubbing and playback. Trails stop at respawns, gaps
 longer than 0.5 seconds and jumps exceeding 200 Unreal units.
 
+Chat is rendered directly in the 3D view, right-aligned in the top-right corner
+without a background box, for three seconds of demo time. It includes player
+names and a team-chat marker. Pausing and seeking also apply to chat; the timeline
+includes messages sent after the final movement sample.
+
 `lib/scene3d.py` contains the Qt3D scene, geometry and camera interaction.
 `demo4_viewer.py` handles demo loading, movement interpolation and the Qt widgets.
 Scene and playback regression tests run without opening a window:
@@ -50,11 +55,12 @@ Scene and playback regression tests run without opening a window:
 python3 -m unittest discover -s tests -v
 ```
 
-To also test scene replacement while the renderer is running, enable the native
-Qt platform (this briefly opens a window). On macOS:
+To also test scene replacement and chat visibility while the renderer is running,
+run the graphics test in isolation with the native Qt platform (this briefly
+opens a window). On macOS:
 
 ```bash
-QT_QPA_PLATFORM=cocoa python3 -m unittest discover -s tests -v
+QT_QPA_PLATFORM=cocoa python3 -m unittest discover -s tests -v -k test_rebuild_after_renderer_started
 ```
 
 ## Architecture

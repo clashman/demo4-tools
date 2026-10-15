@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 import math
 from pathlib import Path
 import signal
@@ -73,6 +73,7 @@ class LoadDemo(QThread):
                 "filename": self.filename,
                 "map_name": header["map"],
                 "tracks": tracks,
+                "chat": analyzer.chat,
             })
         except Exception as exc:  # surface parser/IO errors in the window
             self.failed.emit(str(exc))
@@ -279,9 +280,12 @@ class Viewer(QMainWindow):
         self.player_actors = {}
         self.worker = None
         self.duration = 0.0
+        self.chat = []
+        self.chat_times = []
 
         self.scene = SceneWindow()
         self.view = QWidget.createWindowContainer(self.scene, self)
+        self.chat_overlay = self.scene.chat_overlay
         self.view.setToolTip("Left-drag: rotate · Middle-drag: pan · Scroll: zoom")
 
         central = QWidget(self)
@@ -396,13 +400,16 @@ class Viewer(QMainWindow):
     def _load_failed(self, message: str):
         self.open_button.setEnabled(True)
         self.loading_indicator.hide()
-        self.play_button.setEnabled(bool(self.tracks))
+        self.play_button.setEnabled(bool(self.tracks or self.chat))
         self.title.setText("Loading failed")
         QMessageBox.critical(self, "Could not load demo", message)
 
     def _loaded(self, data: dict):
         self.open_button.setEnabled(True)
         self.tracks = data["tracks"]
+        self.chat = sorted(data.get("chat", []), key=lambda msg: msg["time"])
+        self.chat_times = [msg["time"] for msg in self.chat]
+        self.chat_overlay.display([])
         self.track_indices = {
             player: _index_track(track) for player, track in self.tracks.items()
         }
@@ -410,7 +417,7 @@ class Viewer(QMainWindow):
         self.current_file = data["filename"]
         self.title.setText(f"{self.map_name}  ·  {self.current_file.name}")
         self._rebuild_player_controls()
-        if not self.tracks:
+        if not self.tracks and not self.chat:
             self.duration = 0.0
             self.time_slider.setRange(0, 0)
             self.time_label.setText("00:00.000")
@@ -425,6 +432,7 @@ class Viewer(QMainWindow):
         self._build_scene()
         times = [row["elapsed_seconds"] for track in self.tracks.values()
                  for row in track["movement"]]
+        times.extend(msg["time"] + 3.0 for msg in self.chat)
         self.duration = max(times)
         self.time_slider.setRange(0, round(self.duration * 1000))
         self.time_slider.setValue(0)
@@ -515,9 +523,10 @@ class Viewer(QMainWindow):
             self.time_slider.setValue(next_value)
 
     def _update_time(self, *_):
-        if not self.tracks:
-            return
         timestamp = self.time_slider.value() / 1000.0
+        first = bisect_right(self.chat_times, timestamp - 3.0)
+        last = bisect_right(self.chat_times, timestamp)
+        self.chat_overlay.display(self.chat[max(first, last - 6):last])
         details = []
         for player, track in self.tracks.items():
             actors = self.player_actors[player]
