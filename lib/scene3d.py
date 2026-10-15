@@ -103,17 +103,17 @@ class Arrow(Core.QEntity):
             QVector3D(0, 1, 0), QVector3D(*direction).normalized()))
 
 
-class ChatOverlay(Extras.QText2DEntity):
+class ScreenText(Extras.QText2DEntity):
     """Screen-aligned text rendered by Qt3D in the existing window."""
 
-    def __init__(self, scene):
+    def __init__(self, scene, alignment=Qt.AlignmentFlag.AlignRight):
         super().__init__(scene.root)
         self.scene = scene
         font = QFont()
         font.setPixelSize(16)
         self.setFont(font)
         self.setColor(QColor("#eef3fa"))
-        self.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+        self.setAlignment(alignment | Qt.AlignmentFlag.AlignTop)
         self.setEnabled(False)
         self.transform = Core.QTransform(self)
         self.addComponent(self.transform)
@@ -140,20 +140,26 @@ class ChatOverlay(Extras.QText2DEntity):
     def reposition(self, *_):
         width, height = max(1, self.scene.width()), max(1, self.scene.height())
         self.camera.lens().setOrthographicProjection(0, width, 0, height, 0.1, 100)
-        self.setWidth(min(420, max(1, width - 24)))
+        self.setWidth(min(420, max(1, (width - 36) / 2)))
         self.setHeight(max(1, height - 24))
-        self.transform.setTranslation(QVector3D(width - self.width() - 12, 12, 0))
+        x = width - self.width() - 12 if self.alignment() & Qt.AlignmentFlag.AlignRight else 12
+        self.transform.setTranslation(QVector3D(x, 12, 0))
 
-    def display(self, messages):
+    def display(self, lines):
         # QText2DEntity lays out paragraphs at the same origin. Soft line
         # breaks keep all messages in one layout with distinct baselines.
-        text = "\u2028".join(
-            f"{'[Team] ' if msg.get('channel') == 'team' else ''}"
-            f"{msg.get('player') or 'Unknown'}: {msg['text']}" for msg in messages)
+        text = "\u2028".join(lines)
         text = text.replace("\r\n", "\n").replace("\n", "\u2028").replace("\r", "\u2028")
         if text != self.text():
             self.setText(text)
         self.setEnabled(bool(text))
+
+
+class ChatOverlay(ScreenText):
+    def display(self, messages):
+        super().display(
+            f"{'[Team] ' if msg.get('channel') == 'team' else ''}"
+            f"{msg.get('player') or 'Unknown'}: {msg['text']}" for msg in messages)
 
 
 class SceneWindow(Extras.Qt3DWindow):
@@ -178,6 +184,7 @@ class SceneWindow(Extras.Qt3DWindow):
         self.camera().setViewCenter(QVector3D())
         self._create_axes()
         self.chat_overlay = ChatOverlay(self)
+        self.score_overlay = ScreenText(self, Qt.AlignmentFlag.AlignLeft)
         self.widthChanged.connect(self._projection)
         self.heightChanged.connect(self._projection)
         self._projection()

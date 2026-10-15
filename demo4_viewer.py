@@ -74,9 +74,23 @@ class LoadDemo(QThread):
                 "map_name": header["map"],
                 "tracks": tracks,
                 "chat": analyzer.chat,
+                "scores": _score_tracks(analyzer),
             })
         except Exception as exc:  # surface parser/IO errors in the window
             self.failed.emit(str(exc))
+
+
+def _score_tracks(analyzer):
+    """Use replicated scores, including penalties/resets, rather than counting kills."""
+    players = {pri.id: analyzer.pri_name(pri) for pri in analyzer.players()}
+    scores = {name: [] for name in players.values() if name}
+    for timestamp, pri_id, field, value in analyzer.score_log:
+        name = players.get(pri_id)
+        if name and field == "Score":
+            scores[name].append((timestamp, int(value or 0)))
+    for rows in scores.values():
+        rows.sort(key=lambda row: row[0])
+    return scores
 
 
 def _vector(value):
@@ -282,10 +296,13 @@ class Viewer(QMainWindow):
         self.duration = 0.0
         self.chat = []
         self.chat_times = []
+        self.scores = {}
+        self.score_times = {}
 
         self.scene = SceneWindow()
         self.view = QWidget.createWindowContainer(self.scene, self)
         self.chat_overlay = self.scene.chat_overlay
+        self.score_overlay = self.scene.score_overlay
         self.view.setToolTip("Left-drag: rotate · Middle-drag: pan · Scroll: zoom")
 
         central = QWidget(self)
@@ -400,7 +417,7 @@ class Viewer(QMainWindow):
     def _load_failed(self, message: str):
         self.open_button.setEnabled(True)
         self.loading_indicator.hide()
-        self.play_button.setEnabled(bool(self.tracks or self.chat))
+        self.play_button.setEnabled(bool(self.tracks or self.chat or self.scores))
         self.title.setText("Loading failed")
         QMessageBox.critical(self, "Could not load demo", message)
 
@@ -410,6 +427,10 @@ class Viewer(QMainWindow):
         self.chat = sorted(data.get("chat", []), key=lambda msg: msg["time"])
         self.chat_times = [msg["time"] for msg in self.chat]
         self.chat_overlay.display([])
+        self.scores = {name: sorted(rows, key=lambda row: row[0])
+                       for name, rows in data.get("scores", {}).items()}
+        self.score_times = {name: [row[0] for row in rows] for name, rows in self.scores.items()}
+        self.score_overlay.display([])
         self.track_indices = {
             player: _index_track(track) for player, track in self.tracks.items()
         }
@@ -417,7 +438,7 @@ class Viewer(QMainWindow):
         self.current_file = data["filename"]
         self.title.setText(f"{self.map_name}  ·  {self.current_file.name}")
         self._rebuild_player_controls()
-        if not self.tracks and not self.chat:
+        if not self.tracks and not self.chat and not self.scores:
             self.duration = 0.0
             self.time_slider.setRange(0, 0)
             self.time_label.setText("00:00.000")
@@ -433,7 +454,8 @@ class Viewer(QMainWindow):
         times = [row["elapsed_seconds"] for track in self.tracks.values()
                  for row in track["movement"]]
         times.extend(msg["time"] + 3.0 for msg in self.chat)
-        self.duration = max(times)
+        times.extend(row[0] for rows in self.scores.values() for row in rows)
+        self.duration = max(times, default=0.0)
         self.time_slider.setRange(0, round(self.duration * 1000))
         self.time_slider.setValue(0)
         self.time_slider.setEnabled(True)
@@ -527,6 +549,12 @@ class Viewer(QMainWindow):
         first = bisect_right(self.chat_times, timestamp - 3.0)
         last = bisect_right(self.chat_times, timestamp)
         self.chat_overlay.display(self.chat[max(first, last - 6):last])
+        score_lines = []
+        for name, rows in self.scores.items():
+            index = bisect_right(self.score_times[name], timestamp) - 1
+            score = rows[index][1] if index >= 0 else 0
+            score_lines.append(f"{name}: {score}")
+        self.score_overlay.display(score_lines)
         details = []
         for player, track in self.tracks.items():
             actors = self.player_actors[player]

@@ -46,6 +46,8 @@ Chat is rendered directly in the 3D view, right-aligned in the top-right corner
 without a background box, for three seconds of demo time. It includes player
 names and a team-chat marker. Pausing and seeking also apply to chat; the timeline
 includes messages sent after the final movement sample.
+Player scores appear in the same style at the top left and follow the recorded
+score updates at the selected demo time, including deductions and resets.
 
 `lib/scene3d.py` contains the Qt3D scene, geometry and camera interaction.
 `demo4_viewer.py` handles demo loading, movement interpolation and the Qt widgets.
