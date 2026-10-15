@@ -26,19 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-# VTK's modular Python build requires backend/style imports to register their
-# concrete implementations before constructing the Qt render window.
-import vtkmodules.vtkInteractionStyle
-import vtkmodules.vtkRenderingOpenGL2
-
-from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
-from vtkmodules.vtkCommonCore import vtkPoints
-from vtkmodules.vtkCommonDataModel import vtkCellArray, vtkPolyData
-from vtkmodules.vtkFiltersSources import vtkArrowSource, vtkSphereSource
-from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTrackballCamera
-from vtkmodules.vtkInteractionWidgets import vtkOrientationMarkerWidget
-from vtkmodules.vtkRenderingAnnotation import vtkAxesActor
-from vtkmodules.vtkRenderingCore import vtkActor, vtkPolyDataMapper, vtkRenderer
+from lib.scene3d import Arrow, BACKGROUND, Lines, Marker, SceneWindow
 
 from lib.demo import Actor, read_header
 from lib.netmodel import Model
@@ -292,13 +280,8 @@ class Viewer(QMainWindow):
         self.worker = None
         self.duration = 0.0
 
-        self.renderer = vtkRenderer()
-        self.renderer.SetBackground(0.055, 0.075, 0.11)
-        self.view = QVTKRenderWindowInteractor(self)
-        self.view.GetRenderWindow().AddRenderer(self.renderer)
-        self.camera_style = vtkInteractorStyleTrackballCamera()
-        self.camera_style.SetDefaultRenderer(self.renderer)
-        self.view.SetInteractorStyle(self.camera_style)
+        self.scene = SceneWindow()
+        self.view = QWidget.createWindowContainer(self.scene, self)
         self.view.setToolTip("Left-drag: rotate · Middle-drag: pan · Scroll: zoom")
 
         central = QWidget(self)
@@ -374,17 +357,16 @@ class Viewer(QMainWindow):
         self.timer.setInterval(33)
         self.timer.timeout.connect(self._advance)
 
-        self.view.Initialize()
-        self.view.Start()
-        self.axes_widget = vtkOrientationMarkerWidget()
-        self.axes_widget.SetOrientationMarker(vtkAxesActor())
-        self.axes_widget.SetInteractor(self.view.GetRenderWindow().GetInteractor())
-        self.axes_widget.SetViewport(0.02, 0.02, 0.17, 0.23)
-        self.axes_widget.SetOutlineColor(0.75, 0.78, 0.84)
-        self.axes_widget.SetEnabled(True)
-        self.axes_widget.InteractiveOff()
         if initial_file:
             QTimer.singleShot(0, lambda: self.load_file(initial_file))
+
+    def closeEvent(self, event):
+        if self.worker and self.worker.isRunning():
+            self.statusBar().showMessage("Please wait until the demo has finished loading.")
+            event.ignore()
+            return
+        self.timer.stop()
+        super().closeEvent(event)
 
     def open_dialog(self):
         filename, _ = QFileDialog.getOpenFileName(
@@ -404,6 +386,7 @@ class Viewer(QMainWindow):
         self.loading_indicator.show()
         self.play_button.setEnabled(False)
         self.timer.stop()
+        self.play_button.setText("▶")
         self.title.setText(f"Loading {filename.name} …")
         self.worker = LoadDemo(filename)
         self.worker.loaded.connect(self._loaded)
@@ -413,6 +396,7 @@ class Viewer(QMainWindow):
     def _load_failed(self, message: str):
         self.open_button.setEnabled(True)
         self.loading_indicator.hide()
+        self.play_button.setEnabled(bool(self.tracks))
         self.title.setText("Loading failed")
         QMessageBox.critical(self, "Could not load demo", message)
 
@@ -425,17 +409,19 @@ class Viewer(QMainWindow):
         self.map_name = data["map_name"]
         self.current_file = data["filename"]
         self.title.setText(f"{self.map_name}  ·  {self.current_file.name}")
+        self._rebuild_player_controls()
         if not self.tracks:
+            self.duration = 0.0
+            self.time_slider.setRange(0, 0)
+            self.time_label.setText("00:00.000")
             self.loading_indicator.hide()
-            self.renderer.RemoveAllViewProps()
+            self.scene.clear()
             self.player_actors.clear()
             self.time_slider.setEnabled(False)
             self.play_button.setEnabled(False)
-            self.view.Render()
             QMessageBox.information(self, "No named movement found",
                                     "No player movement could be identified in this demo.")
             return
-        self._rebuild_player_controls()
         self._build_scene()
         times = [row["elapsed_seconds"] for track in self.tracks.values()
                  for row in track["movement"]]
@@ -449,7 +435,6 @@ class Viewer(QMainWindow):
             f"{len(self.tracks)} players · {sum(len(t['movement']) for t in self.tracks.values()):,} samples"
         )
         self._update_time()
-        self.view.Render()
 
     def _rebuild_player_controls(self):
         while self.player_row.count():
@@ -469,110 +454,45 @@ class Viewer(QMainWindow):
         self.player_row.addStretch(1)
 
     def _build_scene(self):
-        self.renderer.RemoveAllViewProps()
+        self.scene.clear()
         self.player_actors.clear()
         all_points = []
-
         for index, (player, track) in enumerate(self.tracks.items()):
             color = PLAYER_COLORS[index % len(PLAYER_COLORS)]
-            points = vtkPoints()
-            lines = vtkCellArray()
-            for lifetime in track["pawn_lifetimes"]:
-                key = (lifetime["channel"], lifetime["channel_lifetime"])
-                rows = [row for row in track["movement"]
-                        if (row["channel"], row["channel_lifetime"]) == key]
-                rows.sort(key=lambda row: row["elapsed_seconds"])
-                segment = []
-
-                def flush_segment():
-                    if len(segment) >= 2:
-                        lines.InsertNextCell(len(segment))
-                        for point_id in segment:
-                            lines.InsertCellPoint(point_id)
-                    segment.clear()
-
+            points = []
+            for _, rows in self.track_indices[player]:
                 previous = None
                 for row in rows:
                     world = _world(row["location"])
                     all_points.append(world)
                     if previous is not None:
                         dt = row["elapsed_seconds"] - previous["elapsed_seconds"]
-                        distance = math.dist(world, _world(previous["location"]))
-                        if not (0 < dt <= 0.5 and distance <= 200):
-                            flush_segment()
-                    point_id = points.InsertNextPoint(*world)
-                    segment.append(point_id)
+                        start = _world(previous["location"])
+                        if 0 < dt <= 0.5 and math.dist(world, start) <= 200:
+                            points.extend((start, world))
                     previous = row
-                flush_segment()
-
-            poly = vtkPolyData()
-            poly.SetPoints(points)
-            poly.SetLines(lines)
-            mapper = vtkPolyDataMapper()
-            mapper.SetInputData(poly)
-            path_actor = vtkActor()
-            path_actor.SetMapper(mapper)
-            path_actor.GetProperty().SetColor(*color)
-            path_actor.GetProperty().SetOpacity(0.28)
-            path_actor.GetProperty().SetLineWidth(2.0)
-            self.renderer.AddActor(path_actor)
-
-            sphere = vtkSphereSource()
-            sphere.SetRadius(42.0)
-            sphere.SetThetaResolution(16)
-            sphere.SetPhiResolution(12)
-            sphere_mapper = vtkPolyDataMapper()
-            sphere_mapper.SetInputConnection(sphere.GetOutputPort())
-            marker = vtkActor()
-            marker.SetMapper(sphere_mapper)
-            marker.GetProperty().SetColor(*color)
-            self.renderer.AddActor(marker)
-
-            arrow = vtkArrowSource()
-            arrow.SetTipLength(0.30)
-            arrow.SetTipRadius(0.12)
-            arrow.SetShaftRadius(0.055)
-            arrow_mapper = vtkPolyDataMapper()
-            arrow_mapper.SetInputConnection(arrow.GetOutputPort())
-            facing_actor = vtkActor()
-            facing_actor.SetMapper(arrow_mapper)
-            facing_actor.GetProperty().SetColor(*color)
-            self.renderer.AddActor(facing_actor)
-
-            velocity_actor = vtkActor()
-            velocity_actor.GetProperty().SetColor(0.85, 0.9, 1.0)
-            velocity_actor.GetProperty().SetLineWidth(3.0)
-            self.renderer.AddActor(velocity_actor)
+            # Dim opaque trails avoid transparency sorting artifacts at crossings.
+            trail_color = tuple(bg + (c - bg) * 0.28
+                                for bg, c in zip(BACKGROUND, color))
+            path = Lines(self.scene.content, points, trail_color)
+            path.setEnabled(self.path_checkbox.isChecked())
             self.player_actors[player] = {
-                "path": path_actor,
-                "marker": marker,
-                "facing": facing_actor,
-                "velocity": velocity_actor,
+                "path": path,
+                "marker": Marker(self.scene.content, color),
+                "facing": Arrow(self.scene.content, color, FACING_LENGTH, FACING_THICKNESS),
+                "velocity": Lines(self.scene.content, [(0, 0, 0), (0, 0, 0)],
+                                  (0.85, 0.9, 1.0)),
             }
-
         if all_points:
-            low = [min(point[axis] for point in all_points) for axis in range(3)]
-            high = [max(point[axis] for point in all_points) for axis in range(3)]
-            center = [(a + b) / 2 for a, b in zip(low, high)]
-            extent = max(max(b - a for a, b in zip(low, high)), 1000.0)
-            camera = self.renderer.GetActiveCamera()
-            camera.SetFocalPoint(*center)
-            camera.SetPosition(center[0] + extent * 1.35,
-                               center[1] + extent * 1.25,
-                               center[2] + extent * 1.35)
-            camera.SetViewUp(0, 1, 0)
-            camera.ParallelProjectionOn()
-            camera.SetParallelScale(extent * 0.72)
-            self.renderer.ResetCameraClippingRange()
+            self.scene.fit(all_points)
 
     def _toggle_paths(self, visible: bool):
         for player, actors in self.player_actors.items():
-            actors["path"].SetVisibility(visible and self.checkboxes[player].isChecked())
-        self.view.Render()
+            actors["path"].setEnabled(visible and self.checkboxes[player].isChecked())
 
     def _toggle_player(self, player: str, visible: bool):
         actors = self.player_actors.get(player, {})
-        actors["path"].SetVisibility(visible and self.path_checkbox.isChecked())
+        actors["path"].setEnabled(visible and self.path_checkbox.isChecked())
         self._update_time()
 
     def _toggle_play(self):
@@ -604,53 +524,23 @@ class Viewer(QMainWindow):
             visible = self.checkboxes[player].isChecked()
             sample = _sample_track(self.track_indices[player], timestamp)
             active = visible and sample is not None
-            actors["marker"].SetVisibility(active)
-            actors["facing"].SetVisibility(active and self.facing_checkbox.isChecked())
-            actors["velocity"].SetVisibility(active and self.velocity_checkbox.isChecked()
+            actors["marker"].setEnabled(active)
+            actors["facing"].setEnabled(active and self.facing_checkbox.isChecked())
+            actors["velocity"].setEnabled(active and self.velocity_checkbox.isChecked()
                                                 and sample["movement_direction"] is not None)
             if not active:
                 continue
 
             position = _world(sample["location"])
-            actors["marker"].SetPosition(*position)
+            actors["marker"].set_position(position)
             direction = _unit(_world(sample["facing_direction"])) or (1, 0, 0)
-            angle = math.degrees(math.acos(max(-1.0, min(1.0, direction[0]))))
-            if direction[1] < 0:
-                angle = -angle
-            axis = _unit((0.0, -direction[2], direction[1]))
-            if axis is None:
-                axis = (0.0, 1.0, 0.0)
-            transform = actors["facing"].GetUserTransform()
-            if transform is None:
-                from vtkmodules.vtkCommonTransforms import vtkTransform
-                transform = vtkTransform()
-                actors["facing"].SetUserTransform(transform)
-            transform.Identity()
-            transform.Translate(*position)
-            transform.RotateWXYZ(angle, *axis)
-            # vtkArrowSource has a unit-length X axis but a tiny ~0.05 radius.
-            # Scale its cross-section too, otherwise the heading is invisible
-            # at the map's several-thousand-unit camera scale.
-            transform.Scale(FACING_LENGTH, FACING_THICKNESS, FACING_THICKNESS)
+            actors["facing"].set_pose(position, direction)
 
             if sample["movement_direction"] is not None:
                 move_direction = _unit(_world(sample["movement_direction"]))
                 length = min(180.0, max(45.0, sample["speed"] * 0.15))
                 end = tuple(position[i] + move_direction[i] * length for i in range(3))
-                line = actors["velocity"].GetMapper()
-                if line is None:
-                    from vtkmodules.vtkFiltersSources import vtkLineSource
-                    source = vtkLineSource()
-                    source.SetPoint1(*position)
-                    source.SetPoint2(*end)
-                    mapper = vtkPolyDataMapper()
-                    mapper.SetInputConnection(source.GetOutputPort())
-                    actors["velocity"].SetMapper(mapper)
-                    actors["velocity_source"] = source
-                else:
-                    source = actors["velocity_source"]
-                    source.SetPoint1(*position)
-                    source.SetPoint2(*end)
+                actors["velocity"].set_points((position, end))
 
             yaw = sample["rotation_degrees"]["yaw"]
             speed = sample["speed"]
@@ -660,7 +550,6 @@ class Viewer(QMainWindow):
 
         self.time_label.setText(f"{self._format_time(timestamp)} / {self._format_time(self.duration)}")
         self.statusBar().showMessage("   |   ".join(details) if details else "No player position at this time")
-        self.view.Render()
 
     @staticmethod
     def _format_time(seconds: float) -> str:

@@ -5,7 +5,7 @@ recorded network stream and extracts **kills**, **item pickups** and the
 **score** of each player.
 
 ```bash
-python ut2k4demo.py *.demo4 [--db ut2004_packages.json.gz] [--out output]
+python3 ut2k4demo.py *.demo4 [--db ut2004_packages.json.gz] [--out output]
 ```
 
 No UT2004 installation is needed. The layouts of classes and properties come
@@ -18,8 +18,8 @@ database is used.
 To build or extend the database (an installation is only needed for this step):
 
 ```bash
-python pkgdb.py --ut UT2004 *.demo4    # packages referenced by these demos
-python pkgdb.py --ut UT2004 --all      # every package of the installation
+python3 pkgdb.py --ut UT2004 *.demo4    # packages referenced by these demos
+python3 pkgdb.py --ut UT2004 --all      # every package of the installation
 ```
 
 For every demo, a Markdown report (`<demo>.md`) and the raw data (`<demo>.json`)
@@ -28,14 +28,34 @@ supported: the report then also contains team scores and team kills.
 
 ## 3D demo viewer
 
-The viewer displays inferred player movement trails, facing direction and
-movement direction for a demo:
+The Qt3D viewer displays inferred player movement trails, facing direction and
+movement direction for a demo. It requires PySide6 including its Qt3D modules:
 
 ```bash
-python demo4_viewer.py path/to/demo.demo4
+python3 demo4_viewer.py path/to/demo.demo4
 ```
 
-![UT2004 Demo Viewer showing two players' movement trails](demo4_viewer.png)
+Drag with the left mouse button to rotate, drag with the middle button to pan,
+and scroll to zoom. Rotation keeps the horizon upright and stops just short of
+the poles, so dragging does not flip direction. The view uses an orthographic camera and an orientation
+inset. Player checkboxes and the trail/direction toggles control visibility;
+the timeline supports scrubbing and playback. Trails stop at respawns, gaps
+longer than 0.5 seconds and jumps exceeding 200 Unreal units.
+
+`lib/scene3d.py` contains the Qt3D scene, geometry and camera interaction.
+`demo4_viewer.py` handles demo loading, movement interpolation and the Qt widgets.
+Scene and playback regression tests run without opening a window:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+To also test scene replacement while the renderer is running, enable the native
+Qt platform (this briefly opens a window). On macOS:
+
+```bash
+QT_QPA_PLATFORM=cocoa python3 -m unittest discover -s tests -v
+```
 
 ## Architecture
 
@@ -144,7 +164,7 @@ infer_virtual.py  helper that infers layouts of classes from missing packages
 | `find_class(model, path)` | `NetClass` for a path like `'XGame.xPawn'`. |
 | `collect(data, hdr, pmap, model)` | Collects all bunches of channels whose actor class is unknown. |
 | `score(parser, nc, withrot, bunches)` | Counts how many bunches decode completely, partially or not at all under a given hypothesis. |
-| `infer(...)` | Tests combinations of parent class, number of extra fields and initial-rotation flag, and reports the best layout per unknown class. Can be run as a script: `python infer_virtual.py demo.demo4 "{'pkg': (exports, names)}"`. |
+| `infer(...)` | Tests combinations of parent class, number of extra fields and initial-rotation flag, and reports the best layout per unknown class. Can be run as a script: `python3 infer_virtual.py demo.demo4 "{'pkg': (exports, names)}"`. |
 
 ## `ut2k4demo.py` – analysis and reports
 
